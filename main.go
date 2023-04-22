@@ -29,7 +29,7 @@ func main() {
 	}()
 
 	//Creating and run new server
-	srv := router.NewServer(context.Background(), ":8080", database)
+	srv := router.NewServer(context.Background(), "https://habitadam.herokuapp.com/", database)
 	if err := srv.Run(); err != nil {
 		fmt.Println(err)
 	}
