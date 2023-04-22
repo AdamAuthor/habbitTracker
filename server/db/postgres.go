@@ -21,6 +21,7 @@ type HabitRepository interface {
 }
 
 type UserRepository interface {
+	SetPasswordResetToken(ctx context.Context, email, token string) error
 	CreateGoogle(ctx context.Context, user *models.User) error
 	Create(ctx context.Context, user *models.User) error
 	ConfirmRegistration(ctx context.Context, token string) error
@@ -30,4 +31,7 @@ type UserRepository interface {
 	Delete(ctx context.Context, id int) error
 	Update(ctx context.Context, user *models.User) error
 	FindByConfirmToken(ctx context.Context, token string) (*models.User, error)
+	FindByPasswordResetToken(ctx context.Context, token string) (*models.User, error)
+	UpdatePassword(ctx context.Context, email string, password string) error
+	DeletePasswordResetToken(ctx context.Context, email string) error
 }

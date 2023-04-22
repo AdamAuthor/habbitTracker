@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -42,12 +43,11 @@ func (s *Server) basicHandler() chi.Router {
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint}
-	randomState := random.GenerateRandomString()
 
 	r := chi.NewRouter()
 
 	r.Get("/loginGoogle", func(w http.ResponseWriter, r *http.Request) {
-		url := googleOauthConfig.AuthCodeURL(randomState)
+		url := googleOauthConfig.AuthCodeURL(random.GenerateRandomString())
 		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 	})
 
@@ -68,7 +68,12 @@ func (s *Server) basicHandler() chi.Router {
 			return
 		}
 
-		defer userInfo.Body.Close()
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+
+			}
+		}(userInfo.Body)
 
 		gg := new(models.Gmail)
 		err = json.NewDecoder(userInfo.Body).Decode(gg)
@@ -114,14 +119,14 @@ func (s *Server) basicHandler() chi.Router {
 			return
 		}
 
-		request.ConfirmToken = randomState
+		request.ConfirmToken = random.GenerateRandomString()
 		s.database.User().Create(r.Context(), &request)
 
 		// Извлекаем данные из объекта RegistrationRequest
 		email := request.Email
 		//password := request.Password
 
-		err = sendmail.SendConfirmationEmail(email, randomState)
+		err = sendmail.SendConfirmationEmail(email, request.ConfirmToken)
 		if err != nil {
 			return
 		}
@@ -134,14 +139,14 @@ func (s *Server) basicHandler() chi.Router {
 		token := r.URL.Query().Get("token")
 		user, err := s.database.User().FindByConfirmToken(r.Context(), token)
 		if err != nil {
-			http.Error(w, "Invalid confirmation token", http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		if !user.Confirmed {
 			err = s.database.User().ConfirmRegistration(r.Context(), token)
 			if err != nil {
-				http.Error(w, "Invalid confirmation token", http.StatusBadRequest)
+				http.Error(w, "Unable to confirm registration", http.StatusBadRequest)
 				return
 			}
 
@@ -158,6 +163,75 @@ func (s *Server) basicHandler() chi.Router {
 		} else {
 			fmt.Fprint(w, "Your registration has already been confirmed. You can now log in.")
 		}
+	})
+
+	r.Post("/forgot-password", func(w http.ResponseWriter, r *http.Request) {
+		var request models.ResetPasswordRequest
+		err := json.NewDecoder(r.Body).Decode(&request)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if request.Email == "" || request.Password == "" {
+			http.Error(w, "Email and new password are required", http.StatusBadRequest)
+			return
+		}
+
+		resetToken := random.GenerateRandomString()
+		err = s.database.User().SetPasswordResetToken(r.Context(), request.Email, resetToken)
+		if err != nil {
+			http.Error(w, "Unable to set password reset token", http.StatusInternalServerError)
+			return
+		}
+
+		resetLink := fmt.Sprintf("http://localhost:8080/reset-password?token=%s", resetToken)
+		err = sendmail.SendPasswordResetEmail(request.Email, resetLink)
+		if err != nil {
+			http.Error(w, "Unable to send password reset email", http.StatusInternalServerError)
+			return
+		}
+
+		fmt.Fprint(w, "A password reset link has been sent to your email address.")
+	})
+
+	r.Post("/reset-password", func(w http.ResponseWriter, r *http.Request) {
+		var request models.ResetPasswordRequest
+		err := json.NewDecoder(r.Body).Decode(&request)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		token := r.URL.Query().Get("token")
+		user, err := s.database.User().FindByPasswordResetToken(r.Context(), token)
+		if err != nil {
+			http.Error(w, "Invalid password", http.StatusBadRequest)
+			return
+		}
+
+		if user == nil {
+			http.Error(w, "Invalid password", http.StatusBadRequest)
+			return
+		}
+
+		if request.Password == "" {
+			http.Error(w, "Password is required", http.StatusBadRequest)
+			return
+		}
+
+		err = s.database.User().UpdatePassword(r.Context(), user.Email, request.Password)
+		if err != nil {
+			http.Error(w, "Unable to update password", http.StatusInternalServerError)
+			return
+		}
+
+		err = s.database.User().DeletePasswordResetToken(r.Context(), user.Email)
+		if err != nil {
+			http.Error(w, "Unable to delete password reset password", http.StatusInternalServerError)
+			return
+		}
+
+		fmt.Fprint(w, "Your password has been successfully reset.")
 	})
 
 	return r

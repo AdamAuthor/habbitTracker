@@ -21,15 +21,41 @@ type UserRepository struct {
 	conn *sqlx.DB
 }
 
-func (u *UserRepository) FindByConfirmToken(ctx context.Context, token string) (*models.User, error) {
-	user := &models.User{}
-	if err := u.conn.GetContext(ctx, user, "SELECT * FROM users WHERE confirm_token = $1 LIMIT 1", token); err != nil {
+func (u *UserRepository) DeletePasswordResetToken(ctx context.Context, email string) error {
+	query := "UPDATE users SET password_reset_token = NULL, password_reset_token_created_at = NULL WHERE email = $1"
+	_, err := u.conn.ExecContext(ctx, query, email)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *UserRepository) UpdatePassword(ctx context.Context, email string, password string) error {
+	query := `UPDATE users SET password = $1 WHERE email = $2`
+	_, err := u.conn.ExecContext(ctx, query, password, email)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u *UserRepository) FindByPasswordResetToken(ctx context.Context, token string) (*models.User, error) {
+	user := new(models.User)
+	err := u.conn.GetContext(ctx, user, "SELECT * FROM users WHERE password_reset_token = $1", token)
+	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+			return nil, nil
 		}
 		return nil, err
 	}
+
 	return user, nil
+}
+
+func (u *UserRepository) SetPasswordResetToken(ctx context.Context, email, token string) error {
+	_, err := u.conn.ExecContext(ctx, "UPDATE users SET password_reset_token = $1, password_reset_token_created_at = NOW() WHERE email = $2", token, email)
+	return err
 }
 
 func (u UserRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {
@@ -38,6 +64,17 @@ func (u UserRepository) FindByEmail(ctx context.Context, email string) (*models.
 		return nil, err
 	}
 	return con, nil
+}
+
+func (u *UserRepository) FindByConfirmToken(ctx context.Context, token string) (*models.User, error) {
+	user := &models.User{}
+	if err := u.conn.GetContext(ctx, user, "SELECT * FROM users WHERE confirm_token = $1 LIMIT 1", token); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("User not found with the provided confirmation token")
+		}
+		return nil, err
+	}
+	return user, nil
 }
 
 func (u UserRepository) ConfirmRegistration(ctx context.Context, token string) error {
