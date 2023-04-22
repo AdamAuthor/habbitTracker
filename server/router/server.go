@@ -2,16 +2,18 @@ package router
 
 import (
 	"awesomeProject/server/db"
+	"awesomeProject/server/models"
+	"awesomeProject/server/random"
+	"awesomeProject/server/sendmail"
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"net/smtp"
 	"os"
 	"time"
 )
@@ -38,56 +40,11 @@ func (s *Server) basicHandler() chi.Router {
 		RedirectURL:  "http://localhost:8080/callback",
 		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email"},
+		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint}
-	//TODO: addRandomizer
-	randomState := "random"
+	randomState := random.GenerateRandomString()
 
 	r := chi.NewRouter()
-	r.Get("/main", func(w http.ResponseWriter, r *http.Request) {
-		var html = `<html>
-			<body>
-				<form action="/register" method="post">
-					<label for="email">Email:</label>
-					<input type="email" id="email" name="email" required>
-					<label for="password">Password:</label>
-					<input type="password" id="password" name="password" required>
-					<input type="submit" value="Register">
-				</form>
-				<a href="/loginGoogle">Войти через Google</a>
-			</body>
-		</html>`
-		fmt.Fprintf(w, html)
-
-	})
-
-	r.Post("/register", func(w http.ResponseWriter, r *http.Request) {
-		// Получаем email и password из параметров POST запроса
-		email := r.FormValue("email")
-		content := "Thank you for registering with our service! Please click the link below to confirm your registration:\n\n" +
-			"http://example.com/confirm?email=" + email
-		log.Println(email)
-
-		// Создаем сообщение для отправки
-		msg := []byte("To: " + email + "\r\n" +
-			"Subject: Confirm registration\r\n" +
-			"\r\n" +
-			content)
-
-		// pszzdoosimhclkcv
-		// Отправляем сообщение на SMTP серверВ
-		err := smtp.SendMail("smtp.gmail.com:587",
-			smtp.PlainAuth("", "ahmediarolzasov@gmail.com", "pszzdoosimhclkcv", "smtp.gmail.com"),
-			"ahmediarolzasov@gmail.com", // От кого
-			[]string{email},             // Кому
-			msg)
-		if err != nil {
-			log.Println("Error sending email:", err)
-			return
-		}
-
-		log.Println("Email sent to:", email)
-	})
 
 	r.Get("/loginGoogle", func(w http.ResponseWriter, r *http.Request) {
 		url := googleOauthConfig.AuthCodeURL(randomState)
@@ -95,41 +52,112 @@ func (s *Server) basicHandler() chi.Router {
 	})
 
 	r.Get("/callback", func(w http.ResponseWriter, r *http.Request) {
-		if r.FormValue("state") != randomState {
-			fmt.Println("stage is not valid")
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-			return
-		}
+		code := r.URL.Query().Get("code")
 
-		token, err := googleOauthConfig.Exchange(oauth2.NoContext, r.FormValue("code"))
+		token, err := googleOauthConfig.Exchange(context.Background(), code)
 		if err != nil {
-			fmt.Printf("couldn`t get token: %s\n\n", err.Error())
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			http.Error(w, "Unable to exchange code for token", http.StatusInternalServerError)
 			return
 		}
+		// Получаем информацию о пользователе из Google
+		oauth2Service := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(token))
 
-		resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
+		userInfo, err := oauth2Service.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 		if err != nil {
-			fmt.Printf("couldn`t create get request: %s\n\n", err.Error())
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			http.Error(w, "Unable to get user info from Google", http.StatusInternalServerError)
 			return
 		}
 
-		defer func(Body io.ReadCloser) {
-			err := Body.Close()
-			if err != nil {
+		defer userInfo.Body.Close()
 
+		gg := new(models.Gmail)
+		err = json.NewDecoder(userInfo.Body).Decode(gg)
+		if err != nil {
+			http.Error(w, "Unable to parse user info", http.StatusInternalServerError)
+			return
+		}
+		if len(gg.Name) == 0 {
+			http.Error(w, "Unable to get user name from Google", http.StatusInternalServerError)
+			return
+		}
+		// Проверяем, существует ли пользователь в базе данных
+		existingUser, err := s.database.User().FindByEmail(r.Context(), gg.Email)
+		if err != nil && err != sql.ErrNoRows {
+			http.Error(w, "Unable to check user existence in database", http.StatusInternalServerError)
+			return
+		}
+
+		var user *models.User
+		if existingUser != nil {
+			// Пользователь существует, выполняем вход
+			user = existingUser
+		} else {
+			user = &models.User{
+				Nickname:  gg.Name,
+				Email:     gg.Email,
+				Confirmed: true,
 			}
-		}(resp.Body)
+			err = s.database.User().CreateGoogle(r.Context(), user)
+			if err != nil {
+				http.Error(w, "Unable to create user in database", http.StatusInternalServerError)
+				return
+			}
+		}
 
-		content, err := ioutil.ReadAll(resp.Body)
+	})
+
+	r.Post("/register", func(w http.ResponseWriter, r *http.Request) {
+		var request models.User
+		err := json.NewDecoder(r.Body).Decode(&request)
 		if err != nil {
-			fmt.Printf("couldn`t parse response: %s\n\n", err.Error())
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		fmt.Fprintf(w, "Response: %s", content)
+		request.ConfirmToken = randomState
+		s.database.User().Create(r.Context(), &request)
+
+		// Извлекаем данные из объекта RegistrationRequest
+		email := request.Email
+		//password := request.Password
+
+		err = sendmail.SendConfirmationEmail(email, randomState)
+		if err != nil {
+			return
+		}
+
+		log.Println("Email sent to:", email)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	r.Get("/confirm", func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("token")
+		user, err := s.database.User().FindByConfirmToken(r.Context(), token)
+		if err != nil {
+			http.Error(w, "Invalid confirmation token", http.StatusBadRequest)
+			return
+		}
+
+		if !user.Confirmed {
+			err = s.database.User().ConfirmRegistration(r.Context(), token)
+			if err != nil {
+				http.Error(w, "Invalid confirmation token", http.StatusBadRequest)
+				return
+			}
+
+			user.Confirmed = true
+			user.UpdatedAt = time.Now()
+
+			err = s.database.User().Update(r.Context(), user)
+			if err != nil {
+				http.Error(w, "Unable to update user", http.StatusInternalServerError)
+				return
+			}
+
+			fmt.Fprint(w, "Your registration has been confirmed. You can now log in.")
+		} else {
+			fmt.Fprint(w, "Your registration has already been confirmed. You can now log in.")
+		}
 	})
 
 	return r
