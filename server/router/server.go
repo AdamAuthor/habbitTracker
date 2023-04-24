@@ -124,7 +124,7 @@ func (s *Server) basicHandler() chi.Router {
 		}
 
 		request.ConfirmToken = random.GenerateRandomString()
-		/*s.database.User().Create(r.Context(), &request)
+		s.database.User().Create(r.Context(), &request)
 
 		// Извлекаем данные из объекта RegistrationRequest
 		email := request.Email
@@ -135,7 +135,7 @@ func (s *Server) basicHandler() chi.Router {
 			return
 		}
 
-		log.Println("Email sent to:", email)*/
+		log.Println("Email sent to:", email)
 		fmt.Fprintf(w, "У тебя получилось!")
 		w.WriteHeader(http.StatusOK)
 	})
