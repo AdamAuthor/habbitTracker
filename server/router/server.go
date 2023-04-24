@@ -179,10 +179,6 @@ func (s *Server) basicHandler() chi.Router {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if request.Email == "" || request.Password == "" {
-			http.Error(w, "Email and new password are required", http.StatusBadRequest)
-			return
-		}
 
 		resetToken := random.GenerateRandomString()
 		err = s.database.User().SetPasswordResetToken(r.Context(), request.Email, resetToken)
@@ -212,12 +208,12 @@ func (s *Server) basicHandler() chi.Router {
 		token := r.URL.Query().Get("token")
 		user, err := s.database.User().FindByPasswordResetToken(r.Context(), token)
 		if err != nil {
-			http.Error(w, "Invalid password", http.StatusBadRequest)
+			http.Error(w, "Invalid token", http.StatusBadRequest)
 			return
 		}
 
 		if user == nil {
-			http.Error(w, "Invalid password", http.StatusBadRequest)
+			http.Error(w, "No peoples", http.StatusBadRequest)
 			return
 		}
 

@@ -40,10 +40,6 @@ func SendConfirmationEmail(email, token string) error {
 }
 
 func SendPasswordResetEmail(email, resetLink string) error {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
 	address := os.Getenv("EMAIL_SENDER_ADDRESS")
 	password := os.Getenv("EMAIL_SENDER_PASSWORD")
 	content := "We received a password reset request for your account. Please click the link below to reset your password:\n\n" +
@@ -56,7 +52,7 @@ func SendPasswordResetEmail(email, resetLink string) error {
 		content)
 
 	// Отправляем сообщение на SMTP сервер
-	err = smtp.SendMail("smtp.gmail.com:587",
+	err := smtp.SendMail("smtp.gmail.com:587",
 		smtp.PlainAuth("", address, password, "smtp.gmail.com"),
 		address,         // От кого
 		[]string{email}, // Кому
