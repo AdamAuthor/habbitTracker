@@ -5,17 +5,12 @@ import (
 	"awesomeProject/server/router"
 	"context"
 	"fmt"
-	"github.com/joho/godotenv"
 	"log"
 	"os"
 )
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-	url := os.Getenv("URL")
+	url := os.Getenv("DATABASE_URL")
 
 	database := newdb.NewDB()
 	if err := database.Connect(url); err != nil {
@@ -28,8 +23,13 @@ func main() {
 		}
 	}()
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	//Creating and run new server
-	srv := router.NewServer(context.Background(), "https://habitadam.herokuapp.com/", database)
+	srv := router.NewServer(context.Background(), ":"+port, database)
 	if err := srv.Run(); err != nil {
 		fmt.Println(err)
 	}
