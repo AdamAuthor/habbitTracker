@@ -38,7 +38,7 @@ func NewServer(ctx context.Context, address string, database db.Database) *Serve
 func (s *Server) basicHandler() chi.Router {
 
 	googleOauthConfig := &oauth2.Config{
-		RedirectURL:  "https://obscure-reaches-52566.herokuapp.com/callback",
+		RedirectURL:  "https://habit-makers.herokuapp.com/callback",
 		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
