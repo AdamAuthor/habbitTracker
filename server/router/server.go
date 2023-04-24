@@ -99,6 +99,7 @@ func (s *Server) basicHandler() chi.Router {
 		var user *models.User
 		if existingUser != nil {
 			// Пользователь существует, выполняем вход
+			//TODO: реализовать переход на главную
 			user = existingUser
 		} else {
 			user = &models.User{
@@ -172,6 +173,7 @@ func (s *Server) basicHandler() chi.Router {
 
 	r.Post("/forgot-password", func(w http.ResponseWriter, r *http.Request) {
 		var request models.ResetPasswordRequest
+		log.Println(request)
 		err := json.NewDecoder(r.Body).Decode(&request)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -189,7 +191,7 @@ func (s *Server) basicHandler() chi.Router {
 			return
 		}
 
-		resetLink := fmt.Sprintf("http://localhost:8080/reset-password?token=%s", resetToken)
+		resetLink := fmt.Sprintf("https://habit-makers.herokuapp.com/reset-password?token=%s", resetToken)
 		err = sendmail.SendPasswordResetEmail(request.Email, resetLink)
 		if err != nil {
 			http.Error(w, "Unable to send password reset email", http.StatusInternalServerError)
