@@ -15,7 +15,7 @@ func SendConfirmationEmail(email, token string) error {
 	address := os.Getenv("EMAIL_SENDER_ADDRESS")
 	password := os.Getenv("EMAIL_SENDER_PASSWORD")
 	content := "Thank you for registering with our service! Please click the link below to confirm your registration:\n\n" +
-		"http://localhost:8080/confirm?token=" + token
+		"https://habit-makers.herokuapp.com/confirm?token=" + token
 
 	// Создаем сообщение для отправки
 	msg := []byte("To: " + email + "\r\n" +

@@ -136,7 +136,6 @@ func (s *Server) basicHandler() chi.Router {
 		}
 
 		log.Println("Email sent to:", email)
-		fmt.Fprintf(w, "У тебя получилось!")
 		w.WriteHeader(http.StatusOK)
 	})
 
