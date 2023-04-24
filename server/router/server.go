@@ -140,6 +140,7 @@ func (s *Server) basicHandler() chi.Router {
 	})
 
 	r.Get("/confirm", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
 		token := r.URL.Query().Get("token")
 		user, err := s.database.User().FindByConfirmToken(r.Context(), token)
 		if err != nil {
