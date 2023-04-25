@@ -1,7 +1,6 @@
 package sendmail
 
 import (
-	"github.com/joho/godotenv"
 	"log"
 	"math/rand"
 	"net/smtp"
@@ -10,10 +9,7 @@ import (
 )
 
 func SendConfirmationEmail(email, token string) error {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
+
 	address := os.Getenv("EMAIL_SENDER_ADDRESS")
 	password := os.Getenv("EMAIL_SENDER_PASSWORD")
 	content := "Thank you for registering with our service! Please click the link below to confirm your registration:\n\n" +
@@ -26,7 +22,7 @@ func SendConfirmationEmail(email, token string) error {
 		content)
 
 	// Отправляем сообщение на SMTP сервер
-	err = smtp.SendMail("smtp.gmail.com:587",
+	err := smtp.SendMail("smtp.gmail.com:587",
 		smtp.PlainAuth("", address, password, "smtp.gmail.com"),
 		address,         // От кого
 		[]string{email}, // Кому

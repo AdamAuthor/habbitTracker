@@ -8,9 +8,10 @@ import (
 )
 
 type DB struct {
-	conn  *sqlx.DB
-	habit *HabitRepository
-	user  *UserRepository
+	conn    *sqlx.DB
+	habit   *HabitRepository
+	user    *UserRepository
+	checkIn *CheckInRepository
 }
 
 func NewDB() db.Database {

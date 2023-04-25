@@ -58,7 +58,7 @@ func (u *UserRepository) SetPasswordResetToken(ctx context.Context, email, token
 	return err
 }
 
-func (u UserRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+func (u *UserRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {
 	con := new(models.User)
 	if err := u.conn.Get(con, "SELECT * FROM users WHERE email = $1", email); err != nil {
 		return nil, err
@@ -70,14 +70,14 @@ func (u *UserRepository) FindByConfirmToken(ctx context.Context, token string) (
 	user := &models.User{}
 	if err := u.conn.GetContext(ctx, user, "SELECT * FROM users WHERE confirm_token = $1 LIMIT 1", token); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("User not found with the provided confirmation token")
+			return nil, fmt.Errorf("user not found with the provided confirmation token")
 		}
 		return nil, err
 	}
 	return user, nil
 }
 
-func (u UserRepository) ConfirmRegistration(ctx context.Context, token string) error {
+func (u *UserRepository) ConfirmRegistration(ctx context.Context, token string) error {
 	var userID int
 	err := u.conn.QueryRow("SELECT id FROM users WHERE confirm_token = $1", token).Scan(&userID)
 
@@ -96,7 +96,7 @@ func (u UserRepository) ConfirmRegistration(ctx context.Context, token string) e
 	return nil
 }
 
-func (u UserRepository) CreateGoogle(ctx context.Context, user *models.User) error {
+func (u *UserRepository) CreateGoogle(ctx context.Context, user *models.User) error {
 	_, err := u.conn.Exec("INSERT INTO users(email, confirmed, nickname) VALUES ($1, $2, $3)", user.Email, user.Confirmed, user.Nickname)
 
 	if err != nil {
@@ -105,7 +105,7 @@ func (u UserRepository) CreateGoogle(ctx context.Context, user *models.User) err
 	return nil
 }
 
-func (u UserRepository) Create(ctx context.Context, user *models.User) error {
+func (u *UserRepository) Create(ctx context.Context, user *models.User) error {
 	_, err := u.conn.Exec("INSERT INTO users(email, password, confirm_token, nickname) VALUES ($1, $2, $3, $4)", user.Email, user.Password, user.ConfirmToken, user.Nickname)
 
 	if err != nil {
@@ -114,24 +114,22 @@ func (u UserRepository) Create(ctx context.Context, user *models.User) error {
 	return nil
 }
 
-func (u UserRepository) All(ctx context.Context) ([]*models.User, error) {
-	//TODO implement me
-	panic("implement me")
+func (u *UserRepository) UpdateConfirmed(ctx context.Context, user *models.User) error {
+	query := `UPDATE users SET confirmed = $1, updated_at = $2 WHERE id = $3`
+	_, err := u.conn.ExecContext(ctx, query, user.Confirmed, user.UpdatedAt, user.ID)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (u UserRepository) ByID(ctx context.Context, id int) (*models.User, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (u UserRepository) Update(ctx context.Context, anime *models.User) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (u UserRepository) Delete(ctx context.Context, id int) error {
-	//TODO implement me
-	panic("implement me")
+func (u *UserRepository) Delete(ctx context.Context, id int) error {
+	_, err := u.conn.Exec("DELETE FROM habits WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func NewUserRepository(conn *sqlx.DB) *UserRepository {

@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -159,7 +160,7 @@ func (s *Server) basicHandler() chi.Router {
 			user.Confirmed = true
 			user.UpdatedAt = time.Now()
 
-			err = s.database.User().Update(r.Context(), user)
+			err = s.database.User().UpdateConfirmed(r.Context(), user)
 			if err != nil {
 				http.Error(w, "Unable to update user", http.StatusInternalServerError)
 				return
@@ -235,6 +236,54 @@ func (s *Server) basicHandler() chi.Router {
 		}
 
 		fmt.Fprint(w, "Your password has been successfully reset.")
+	})
+
+	r.Post("/habits/{id}/checkin", func(w http.ResponseWriter, r *http.Request) {
+		habitID := chi.URLParam(r, "id")
+		id, err := strconv.Atoi(habitID)
+		if err != nil {
+			http.Error(w, "Invalid habit ID", http.StatusBadRequest)
+			return
+		}
+
+		var checkIn models.CheckIn
+		err = json.NewDecoder(r.Body).Decode(&checkIn)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		checkIn.HabitID = id
+		err = s.database.CheckIn().AddCheckIn(r.Context(), &checkIn)
+		if err != nil {
+			http.Error(w, "Unable to add check-in", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(checkIn)
+	})
+
+	r.Get("/users/{userID}/habits/{habitID}/checkins", func(w http.ResponseWriter, r *http.Request) {
+		userID, err := strconv.Atoi(chi.URLParam(r, "userID"))
+		if err != nil {
+			http.Error(w, "Invalid user ID", http.StatusBadRequest)
+			return
+		}
+		habitID, err := strconv.Atoi(chi.URLParam(r, "habitID"))
+		if err != nil {
+			http.Error(w, "Invalid habit ID", http.StatusBadRequest)
+			return
+		}
+
+		checkIns, err := s.database.CheckIn().GetCheckIns(r.Context(), habitID, userID)
+		if err != nil {
+			http.Error(w, "Unable to get check-ins", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(checkIns)
 	})
 
 	return r
